@@ -52,7 +52,7 @@ def infer_step_key(summary: dict) -> str:
         return "effective_2000"
     if "step1500_hf" in pred_path:
         return "effective_2500"
-    raise ValueError(f"Unable to infer step key from label={label}, pred_path={pred_path}")
+    return label
 
 
 def row_for(summary: dict) -> dict:
@@ -84,7 +84,12 @@ def main() -> None:
         with open(summary_path) as f:
             rows.append(row_for(json.load(f)))
 
-    rows.sort(key=lambda row: DEFAULT_ORDER.index(row["step_key"]))
+    def sort_key(row: dict) -> tuple[int, int | str]:
+        if row["step_key"] in DEFAULT_ORDER:
+            return (0, DEFAULT_ORDER.index(row["step_key"]))
+        return (1, row["step_key"])
+
+    rows.sort(key=sort_key)
 
     lines = [
         "# LLMSQL Offline Eval Summary",

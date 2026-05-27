@@ -18,6 +18,8 @@
 - 基模：`0.7471`
 - best model：`0.8349`
 - best checkpoint：`/root/shared-nvme/rlvr/merged_models/qwen25_coder_3b_dual4090_fromstep1000_2000steps_sleep_step1500_hf`
+- local 30B upper bound：`0.8523`
+- local 30B eval dir：`/root/shared-nvme/rlvr/evals/qwen3_coder_30b_a3b_full`
 
 最新离线评测总表见：
 
@@ -39,6 +41,7 @@
 | `effective_1500` | `0.8161` | `0.9974` | `41` | `52` | `0.7305` | `0.8153` |
 | `effective_2000` | `0.8087` | `0.9974` | `41` | `60` | `0.6833` | `0.8080` |
 | `effective_2500` | `0.8349` | `0.9979` | `34` | `50` | `0.7716` | `0.8344` |
+| `qwen3_30b_a3b_full` | `0.8523` | `0.9987` | `21` | `87` | `0.8034` | `0.8525` |
 
 说明：
 
@@ -64,6 +67,7 @@
 - data/model/output root: `/root/shared-nvme/rlvr`
 - conda env: `rlvr`
 - base model: `/root/shared-nvme/rlvr/models/Qwen2.5-Coder-3B-Instruct`
+- local large model: `/root/shared-nvme/rlvr/models/Qwen3-Coder-30B-A3B-Instruct`
 - dataset: `https://huggingface.co/datasets/llmsql-bench/llmsql-2.0`
 
 ## Data
@@ -107,13 +111,25 @@ conda run -n rlvr bash /root/rl_project/training/run_llmsql_grpo_full_dual4090_5
 conda run -n rlvr bash /root/rl_project/training/run_llmsql_grpo_full_dual4090_3000steps_noval.sh
 ```
 
-4. 查看 parquet 结构
+4. 跑本地 30B 上限测试
+
+```bash
+CUDA_VISIBLE_DEVICES=0,1,2,3 conda run -n rlvr bash /root/rl_project/scripts/run_llmsql_qwen3_30b_a3b.sh
+```
+
+监控进度：
+
+```bash
+watch -n 5 'python /root/rl_project/scripts/count_llmsql_predictions.py --output-dir /root/shared-nvme/rlvr/evals/qwen3_coder_30b_a3b_full --total 15834'
+```
+
+5. 查看 parquet 结构
 
 ```bash
 conda run -n rlvr python /root/rl_project/scripts/inspect_llmsql_parquet.py
 ```
 
-5. 跑 richer offline eval
+6. 跑 richer offline eval
 
 ```bash
 conda run -n rlvr python /root/rl_project/scripts/eval_llmsql_predictions.py \
@@ -122,7 +138,7 @@ conda run -n rlvr python /root/rl_project/scripts/eval_llmsql_predictions.py \
   --label full_500steps
 ```
 
-6. 汇总多份 offline eval
+7. 汇总多份 offline eval
 
 ```bash
 conda run -n rlvr python /root/rl_project/scripts/summarize_llmsql_offline_eval.py \
