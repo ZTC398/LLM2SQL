@@ -26,6 +26,13 @@
 - 2-step `execution + verifier feedback` SQL agent loop 原型
 - 目标是验证：能否通过 loop 缩短所需训练步数、降低错误、逼近单轮 30B ceiling
 
+当前原型结果：
+
+- `effective_1000` on `probe200`: `0.7500 -> 0.8000`，`+0.0500`
+- `effective_2500` on `probe200`: `0.7950 -> 0.8300`，`+0.0350`
+- 两组里 `correct_to_wrong_rate` 都是 `0.0`
+- 当前收益主要来自 `verification_incorrect -> correct`，不是 execution error repair
+
 最新离线评测总表见：
 
 - [outputs/2026-05-25/llmsql_weight_progression_table.md](/root/rl_project/outputs/2026-05-25/llmsql_weight_progression_table.md)
@@ -57,6 +64,22 @@
   - `effective_2500` = 同一条线的 `global_step_1500`
 - 当前最靠谱的主指标是 `first_exec_match`。
 - `exact_sql_match_rate` 已移除，不再作为主指标。
+
+## Agent Loop Snapshot
+
+当前先做的是 `limit=200` 的 prototype probe，不是 full test。
+
+| Model | Split | first_acc | final_acc | gain | repair_attempt_rate | repair_success_rate | verification_repair_gain | correct_to_wrong_rate |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| `effective_1000` | `probe200` | `0.7500` | `0.8000` | `+0.0500` | `0.2500` | `0.2000` | `0.2083` | `0.0000` |
+| `effective_2500` | `probe200` | `0.7950` | `0.8300` | `+0.0350` | `0.2050` | `0.1707` | `0.1842` | `0.0000` |
+
+本地结果目录：
+
+- `effective_1000`:
+  `/root/shared-nvme/rlvr/evals/qwen25_coder_3b_agent_loop_effective1000_probe200`
+- `effective_2500`:
+  `/root/shared-nvme/rlvr/evals/qwen25_coder_3b_agent_loop_effective2500_probe200`
 
 ## Layout
 

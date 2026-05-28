@@ -427,6 +427,76 @@ def read_completed_question_ids(trace_path: Path) -> set[int]:
     return {int(row["question_id"]) for row in read_jsonl(trace_path)}
 
 
+def compute_counters_from_traces(trace_path: Path) -> dict[str, int]:
+    counters: Counter[str] = Counter()
+    for row in read_jsonl(trace_path):
+        first_inspection = row["first_inspection"]
+        final_inspection = row["final_inspection"]
+        second_inspection = row.get("second_inspection")
+        loop_triggered = bool(row.get("loop_triggered"))
+
+        counters["first_total"] += 1
+        counters[f"first_status:{first_inspection['status']}"] += 1
+        counters[f"final_status:{final_inspection['status']}"] += 1
+        counters["final_correct"] += int(final_inspection["exec_match"])
+
+        if loop_triggered:
+            counters["repair_attempts"] += 1
+            if second_inspection is not None:
+                counters[f"repair_status:{second_inspection['status']}"] += 1
+                counters[f"repair_from:{first_inspection['status']}"] += 1
+                if second_inspection["exec_match"] and not first_inspection["exec_match"]:
+                    counters["repair_successes"] += 1
+                    counters[f"repair_success_from:{first_inspection['status']}"] += 1
+                if first_inspection["exec_match"] and not second_inspection["exec_match"]:
+                    counters["correct_to_wrong"] += 1
+
+    return dict(counters)
+
+
+def compute_loop_metrics(
+    counters: dict[str, int],
+    first_report: dict[str, Any] | None = None,
+    final_report: dict[str, Any] | None = None,
+) -> dict[str, float]:
+    first_total = counters.get("first_total", 0)
+    repair_attempts = counters.get("repair_attempts", 0)
+    repair_successes = counters.get("repair_successes", 0)
+    first_correct = counters.get("first_status:correct", 0)
+    correct_to_wrong = counters.get("correct_to_wrong", 0)
+    verification_attempts = counters.get("repair_from:verification_incorrect", 0)
+    execution_attempts = counters.get("repair_from:execution_error", 0)
+    no_sql_attempts = counters.get("repair_from:no_sql_extracted", 0)
+
+    metrics: dict[str, float] = {
+        "repair_attempt_rate": repair_attempts / first_total if first_total else 0.0,
+        "repair_success_rate": repair_successes / repair_attempts if repair_attempts else 0.0,
+        "verification_repair_gain": (
+            counters.get("repair_success_from:verification_incorrect", 0) / verification_attempts
+            if verification_attempts
+            else 0.0
+        ),
+        "execution_repair_gain": (
+            counters.get("repair_success_from:execution_error", 0) / execution_attempts
+            if execution_attempts
+            else 0.0
+        ),
+        "no_sql_repair_gain": (
+            counters.get("repair_success_from:no_sql_extracted", 0) / no_sql_attempts
+            if no_sql_attempts
+            else 0.0
+        ),
+        "correct_to_wrong_rate": correct_to_wrong / first_correct if first_correct else 0.0,
+    }
+
+    if first_report is not None and final_report is not None:
+        metrics["first_to_final_exec_match_gain"] = (
+            final_report["accuracy"] - first_report["accuracy"]
+        )
+
+    return metrics
+
+
 async def generate_agent_predictions(
     *,
     questions: list[dict[str, Any]],
@@ -464,7 +534,7 @@ async def generate_agent_predictions(
 
     if not pending_questions:
         print(f"Agent loop outputs already complete: {trace_path}")
-        return {}
+        return compute_counters_from_traces(trace_path)
 
     semaphore = asyncio.Semaphore(max_concurrency)
     write_lock = asyncio.Lock()
@@ -720,8 +790,15 @@ def main() -> None:
                 "final_accuracy": final_report["accuracy"],
                 "final_matches": final_report["matches"],
                 "final_sql_errors": final_report["sql_errors"],
+                "loop_metrics": compute_loop_metrics(
+                    counters,
+                    first_report=first_report,
+                    final_report=final_report,
+                ),
             }
         )
+    else:
+        meta["loop_metrics"] = compute_loop_metrics(counters)
 
     meta_path.write_text(json.dumps(meta, indent=2, ensure_ascii=False) + "\n")
     print(json.dumps(meta, indent=2, ensure_ascii=False))
