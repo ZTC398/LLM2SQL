@@ -23,8 +23,9 @@
 
 当前新增方向：
 
-- 2-step `execution + verifier feedback` SQL agent loop 原型
-- 目标是验证：能否通过 loop 缩短所需训练步数、降低错误、逼近单轮 30B ceiling
+- `tool-only` 多轮 SQL agent 设计
+- 目标是让模型自己决定是否继续 loop，而不是由环境显式告诉它当前答案对错
+- 长期目标是接成一个与 `Search-R1` 思路一致的 `agentic RL` 训练版本
 
 当前原型结果：
 
@@ -151,39 +152,35 @@ CUDA_VISIBLE_DEVICES=0,1,2,3 conda run -n rlvr bash /root/rl_project/scripts/run
 watch -n 5 'python /root/rl_project/scripts/count_llmsql_predictions.py --output-dir /root/shared-nvme/rlvr/evals/qwen3_coder_30b_a3b_full --total 15834'
 ```
 
-5. 跑 agent loop 原型
+5. Agentic RL 设计方向
 
 说明：
 
-- 这一步还不是训练内 agentic RL，而是训练前的交互原型验证。
-- 它会分别产出 `first pass` 和 `final pass` 两套预测，并记录每条样本的 loop trace。
-- 如果 loop 明显有 lift，再继续接 `verl` 多轮 rollout。
+- 当前更推荐的方向，不是 verifier-guided repair，而是 `tool-only` agent loop。
+- 环境只返回 SQL 工具原始 observation：
+  - 执行报错
+  - 或执行结果预览
+- 环境不返回 `correct / incorrect` 判断。
+- 模型自己决定：
+  - 继续输出 `<sql> ... </sql>` 再查一次
+  - 或输出 `<final_sql> ... </final_sql>` 结束轨迹
+- 最终 reward 只在轨迹结束时计算，依赖最后的 `<final_sql>`。
 
-先启动一个 OpenAI-compatible 推理服务，例如本地 `vLLM` server，然后运行：
+这版设计更接近 `Search-R1`：
 
-```bash
-OPENAI_API_KEY=EMPTY conda run -n rlvr python /root/rl_project/scripts/run_llmsql_agent_loop.py \
-  --model /root/shared-nvme/rlvr/merged_models/qwen25_coder_3b_dual4090_full_3000steps_noval_step1000_hf \
-  --base-url http://127.0.0.1:8000/v1 \
-  --output-dir /root/shared-nvme/rlvr/evals/qwen25_coder_3b_agent_loop_step1000 \
-  --loop-mode verify_incorrect \
-  --temperature 0.0 \
-  --resume
-```
+- `Search-R1`: `<search> -> <information> -> <search|answer>`
+- `LLMSQL tool loop`: `<sql> -> <execution_result> -> <sql|final_sql>`
 
-推荐先做两组：
+当前建议的实现顺序：
 
-- `effective_1000 + loop`
-- `effective_2500 + loop`
-
-监控产出：
-
-```bash
-watch -n 5 'wc -l /root/shared-nvme/rlvr/evals/qwen25_coder_3b_agent_loop_step1000/agent_traces_5shot_full_verify_incorrect.jsonl'
-```
+1. 新建 agent 数据准备脚本，生成新的 tool-use prompt，而不是复用当前 `only SQL` 的 5-shot prompt
+2. 实现 SQL tool environment，只返回工具 observation
+3. 实现 Search-R1 风格的多轮 generation manager
+4. 再接到 `verl` 的 rollout/trainer
 
 详细设计见：
 
+- [docs/llmsql_tool_only_agent_rl.md](/root/rl_project/docs/llmsql_tool_only_agent_rl.md)
 - [docs/llmsql_agentic_sql_loop.md](/root/rl_project/docs/llmsql_agentic_sql_loop.md)
 
 6. 查看 parquet 结构
@@ -289,8 +286,9 @@ watch -n 5 "wc -l /root/shared-nvme/rlvr/evals/openrouter_owl_alpha_full/preds_5
 - 它是先拿到 `step1000` 的 HF 权重，再新开一轮训练得到的“权重继续训练”结果，不是真正的 optimizer state resume。
 - 当前训练的主要问题不是 reward 无效，而是 `verl + vLLM` 在长时间训练下的 `sleep/cumem` 稳定性。
 - 为避免 checkpoint 存盘报错，actor checkpoint 当前只保存 `model`，不保存 optimizer。
-- 当前 `agent loop` 仍处于原型验证阶段。
-- 它的目标是先回答“execution error + verification incorrect feedback 是否能带来稳定 lift”，然后再决定是否值得改成训练内多轮 rollout。
+- 当前 `agent loop` 的设计方向已经调整为 `tool-only`。
+- 也就是说，中间 observation 只暴露工具原始返回，不暴露 verifier-style `incorrect` 信号。
+- 最终目标是让模型自己学会“何时继续查、何时停止”，而不是等环境告诉它“你错了再修”。
 
 ## Main Scripts
 
@@ -298,6 +296,8 @@ watch -n 5 "wc -l /root/shared-nvme/rlvr/evals/openrouter_owl_alpha_full/preds_5
   - `/root/rl_project/scripts/run_llmsql_baseline.py`
 - agent loop prototype:
   - `/root/rl_project/scripts/run_llmsql_agent_loop.py`
+- tool-only agent design:
+  - `/root/rl_project/docs/llmsql_tool_only_agent_rl.md`
 - richer offline eval:
   - `/root/rl_project/scripts/eval_llmsql_predictions.py`
 - offline eval summary:
