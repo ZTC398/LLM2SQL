@@ -21,6 +21,11 @@
 - local 30B upper bound：`0.8523`
 - local 30B eval dir：`/root/shared-nvme/rlvr/evals/qwen3_coder_30b_a3b_full`
 
+当前新增方向：
+
+- 2-step `execution + verifier feedback` SQL agent loop 原型
+- 目标是验证：能否通过 loop 缩短所需训练步数、降低错误、逼近单轮 30B ceiling
+
 最新离线评测总表见：
 
 - [outputs/2026-05-25/llmsql_weight_progression_table.md](/root/rl_project/outputs/2026-05-25/llmsql_weight_progression_table.md)
@@ -123,13 +128,48 @@ CUDA_VISIBLE_DEVICES=0,1,2,3 conda run -n rlvr bash /root/rl_project/scripts/run
 watch -n 5 'python /root/rl_project/scripts/count_llmsql_predictions.py --output-dir /root/shared-nvme/rlvr/evals/qwen3_coder_30b_a3b_full --total 15834'
 ```
 
-5. 查看 parquet 结构
+5. 跑 agent loop 原型
+
+说明：
+
+- 这一步还不是训练内 agentic RL，而是训练前的交互原型验证。
+- 它会分别产出 `first pass` 和 `final pass` 两套预测，并记录每条样本的 loop trace。
+- 如果 loop 明显有 lift，再继续接 `verl` 多轮 rollout。
+
+先启动一个 OpenAI-compatible 推理服务，例如本地 `vLLM` server，然后运行：
+
+```bash
+OPENAI_API_KEY=EMPTY conda run -n rlvr python /root/rl_project/scripts/run_llmsql_agent_loop.py \
+  --model /root/shared-nvme/rlvr/merged_models/qwen25_coder_3b_dual4090_full_3000steps_noval_step1000_hf \
+  --base-url http://127.0.0.1:8000/v1 \
+  --output-dir /root/shared-nvme/rlvr/evals/qwen25_coder_3b_agent_loop_step1000 \
+  --loop-mode verify_incorrect \
+  --temperature 0.0 \
+  --resume
+```
+
+推荐先做两组：
+
+- `effective_1000 + loop`
+- `effective_2500 + loop`
+
+监控产出：
+
+```bash
+watch -n 5 'wc -l /root/shared-nvme/rlvr/evals/qwen25_coder_3b_agent_loop_step1000/agent_traces_5shot_full_verify_incorrect.jsonl'
+```
+
+详细设计见：
+
+- [docs/llmsql_agentic_sql_loop.md](/root/rl_project/docs/llmsql_agentic_sql_loop.md)
+
+6. 查看 parquet 结构
 
 ```bash
 conda run -n rlvr python /root/rl_project/scripts/inspect_llmsql_parquet.py
 ```
 
-6. 跑 richer offline eval
+7. 跑 richer offline eval
 
 ```bash
 conda run -n rlvr python /root/rl_project/scripts/eval_llmsql_predictions.py \
@@ -138,7 +178,7 @@ conda run -n rlvr python /root/rl_project/scripts/eval_llmsql_predictions.py \
   --label full_500steps
 ```
 
-7. 汇总多份 offline eval
+8. 汇总多份 offline eval
 
 ```bash
 conda run -n rlvr python /root/rl_project/scripts/summarize_llmsql_offline_eval.py \
@@ -226,17 +266,23 @@ watch -n 5 "wc -l /root/shared-nvme/rlvr/evals/openrouter_owl_alpha_full/preds_5
 - 它是先拿到 `step1000` 的 HF 权重，再新开一轮训练得到的“权重继续训练”结果，不是真正的 optimizer state resume。
 - 当前训练的主要问题不是 reward 无效，而是 `verl + vLLM` 在长时间训练下的 `sleep/cumem` 稳定性。
 - 为避免 checkpoint 存盘报错，actor checkpoint 当前只保存 `model`，不保存 optimizer。
+- 当前 `agent loop` 仍处于原型验证阶段。
+- 它的目标是先回答“execution error + verification incorrect feedback 是否能带来稳定 lift”，然后再决定是否值得改成训练内多轮 rollout。
 
 ## Main Scripts
 
 - baseline eval:
   - `/root/rl_project/scripts/run_llmsql_baseline.py`
+- agent loop prototype:
+  - `/root/rl_project/scripts/run_llmsql_agent_loop.py`
 - richer offline eval:
   - `/root/rl_project/scripts/eval_llmsql_predictions.py`
 - offline eval summary:
   - `/root/rl_project/scripts/summarize_llmsql_offline_eval.py`
 - OpenRouter eval:
   - `/root/rl_project/scripts/run_llmsql_openrouter.py`
+- agent loop design:
+  - `/root/rl_project/docs/llmsql_agentic_sql_loop.md`
 - reward:
   - `/root/rl_project/rewards/llmsql_sql_reward.py`
 - main launcher:
