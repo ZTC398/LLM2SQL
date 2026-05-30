@@ -32,6 +32,7 @@
 - `effective_1000` on `probe200`: `0.7500 -> 0.8000`，`+0.0500`
 - `effective_2500` on `probe200`: `0.7950 -> 0.8300`，`+0.0350`
 - `agentic_step1000` on full official eval: `0.7845`
+- `agentic_5shot_step1000` on full official eval: `0.8019 -> 0.8080`，`+0.0061`
 - 两组里 `correct_to_wrong_rate` 都是 `0.0`
 - 当前收益主要来自 `verification_incorrect -> correct`，不是 execution error repair
 - `2x4090` 上的 full agentic train 已经跑通到 `step1000` checkpoint，但连续长跑在 `step1447` 左右遇到 `vLLM sleep/unmap` 路径崩溃；当前恢复策略是 `resume_from_path + disable_sleep_mode`
@@ -83,16 +84,17 @@
 
 说明：
 
-- `agentic_step1000 full` 里的 `first_acc=0.0` 是预期现象，不代表模型完全失效。
-- 原因是当前 tool-only agent 的 first turn 通常输出 exploratory `<sql>`，不是最终答案。
-- 因此 full official 口径的主结果应看 `final_acc=0.7845`，也就是“导出最后 `<final_sql>` 后再跑官方 evaluate”的分数。
+- `agentic_step1000` 这条旧 `0shot` full eval 里的 `first_acc=0.0` 是预期现象，不代表模型完全失效。
+- 原因是那条 `0shot` tool-only agent 的 first turn 通常输出 exploratory `<sql>`，不是最终答案。
+- `5shot` agentic 版本已经明显缓解这个问题，`first_acc` 和 `full_1000` 单轮结果已经基本对齐。
 - 上表里的 `repair_attempt_rate / repair_success_rate / verification_repair_gain / correct_to_wrong_rate` 是旧 `verify_incorrect` 原型 loop 的指标，不适合直接复用到当前 tool-only agent full eval。
 
 当前 tool-only agent 的 full official eval 单独记：
 
-| Model | Split | final_acc | final_matches | final_sql_errors | final_sql_extract_rate |
-| --- | --- | --- | --- | --- | --- |
-| `agentic_step1000` | `full` | `0.7845` | `12421 / 15834` | `816` | `0.9997` |
+| Model | Prompt | Split | first_acc | final_acc | gain | final_matches | final_sql_errors | final_sql_extract_rate |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| `agentic_step1000` | `0shot` | `full` | `0.0000` | `0.7845` | `+0.7845` | `12421 / 15834` | `816` | `0.9997` |
+| `agentic_5shot_step1000` | `5shot` | `full` | `0.8019` | `0.8080` | `+0.0061` | `12794 / 15834` | `44` | `1.0000` |
 
 本地结果目录：
 
@@ -102,6 +104,8 @@
   `/root/shared-nvme/rlvr/evals/qwen25_coder_3b_agent_loop_effective2500_probe200`
 - `agentic_step1000`:
   `/root/shared-nvme/rlvr/evals/qwen25_coder_3b_agentic_step1000_full`
+- `agentic_5shot_step1000`:
+  `/root/shared-nvme/rlvr/evals/qwen25_coder_3b_agentic_5shot_step1000_full`
 
 ## Layout
 

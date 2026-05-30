@@ -11,6 +11,7 @@ from typing import Any
 
 from datasets import Dataset
 from llmsql.utils.evaluation_utils import connect_sqlite, execute_sql
+from llmsql.utils.utils import choose_prompt_builder
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -26,7 +27,7 @@ SPLIT_TO_FILE = {
 
 
 DEFAULT_DATASET_DIR = "/root/shared-nvme/rlvr/datasets/llmsql-2.0"
-DEFAULT_OUTPUT_DIR = "/root/shared-nvme/rlvr/verl_data/llmsql_agent_0shot"
+DEFAULT_OUTPUT_ROOT = "/root/shared-nvme/rlvr/verl_data"
 
 
 def parse_args() -> argparse.Namespace:
@@ -40,8 +41,15 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--output-dir",
-        default=DEFAULT_OUTPUT_DIR,
+        default=None,
         help="Directory to write agentic verl parquet files.",
+    )
+    parser.add_argument(
+        "--num-fewshots",
+        type=int,
+        default=0,
+        choices=[0, 1, 5],
+        help="Official LLMSQL few-shot prompt style to adapt into the agent prompt.",
     )
     parser.add_argument(
         "--splits",
@@ -58,7 +66,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--data-source",
-        default="llmsql-bench/llmsql-2.0:agent-0shot",
+        default=None,
         help="Value written to the verl data_source field.",
     )
     parser.add_argument(
@@ -80,14 +88,35 @@ def normalize_sql_result(result: list[tuple[Any, ...]] | None) -> list[list[Any]
     return [list(row) for row in result]
 
 
+def build_fewshot_examples(num_fewshots: int) -> str:
+    if num_fewshots == 0:
+        return ""
+
+    prompt_builder = choose_prompt_builder(num_fewshots)
+    template = prompt_builder(
+        "__QUESTION__",
+        ["__COL__"],
+        ["text"],
+        ["__ROW__"],
+    )
+    examples_block = template.split("### NOW ANSWER:")[0]
+    if "### EXAMPLE" not in examples_block:
+        return ""
+
+    examples_block = examples_block.split("### EXAMPLE", 1)[1]
+    examples_block = "### EXAMPLE" + examples_block
+    return examples_block.replace("SQL: ", "<final_sql> ").replace(";\n", ";</final_sql>\n")
+
+
 def build_agent_prompt(
     *,
     question: str,
     columns: list[Any],
     types: list[Any],
     sample_row: list[Any],
+    fewshot_examples: str,
 ) -> str:
-    return (
+    prompt = (
         "You are solving a SQLite text-to-SQL task with access to a SQL execution tool.\n\n"
         "Your goal is to produce the correct final SQL for the question.\n\n"
         "At each step, output exactly one action in one of these two formats:\n\n"
@@ -113,11 +142,17 @@ def build_agent_prompt(
         "  - a preview of the execution result\n"
         "- The environment will not tell you whether your query is correct or incorrect.\n"
         "- You must decide for yourself whether to continue or to output <final_sql>.\n\n"
+    )
+    if fewshot_examples:
+        prompt += f"{fewshot_examples}\n"
+    prompt += (
+        "### NOW ANSWER:\n"
         f"Question: {question}\n"
         f"Columns: {columns}\n"
         f"Types: {types}\n"
         f"Sample row: {sample_row}"
     )
+    return prompt
 
 
 def build_record(
@@ -129,6 +164,8 @@ def build_record(
     data_source: str,
     agent_name: str,
     conn: Any,
+    fewshot_examples: str,
+    prompt_style: str,
 ) -> dict[str, Any]:
     sample_row = table["rows"][0] if table["rows"] else []
     prompt_text = build_agent_prompt(
@@ -136,6 +173,7 @@ def build_record(
         columns=table["header"],
         types=table["types"],
         sample_row=sample_row,
+        fewshot_examples=fewshot_examples,
     )
     gold_result = normalize_sql_result(execute_sql(conn, example["sql"]))
     if gold_result is None:
@@ -164,7 +202,7 @@ def build_record(
             "table_id": example["table_id"],
             "question": example["question"],
             "gold_result_json": json.dumps(gold_result, ensure_ascii=False),
-            "prompt_style": "agent-0shot",
+            "prompt_style": prompt_style,
             "agent_protocol": "tool-only",
         },
     }
@@ -173,8 +211,11 @@ def build_record(
 def main() -> None:
     args = parse_args()
     dataset_dir = Path(args.dataset_dir)
-    output_dir = Path(args.output_dir)
+    prompt_style = f"agent-{args.num_fewshots}shot"
+    data_source = args.data_source or f"llmsql-bench/llmsql-2.0:{prompt_style}"
+    output_dir = Path(args.output_dir or f"{DEFAULT_OUTPUT_ROOT}/llmsql_agent_{args.num_fewshots}shot")
     output_dir.mkdir(parents=True, exist_ok=True)
+    fewshot_examples = build_fewshot_examples(args.num_fewshots)
 
     tables = {
         item["table_id"]: item for item in load_jsonl(dataset_dir / "tables.jsonl")
@@ -192,9 +233,11 @@ def main() -> None:
                 table=tables[example["table_id"]],
                 split=split,
                 idx=idx,
-                data_source=args.data_source,
+                data_source=data_source,
                 agent_name=args.agent_name,
                 conn=conn,
+                fewshot_examples=fewshot_examples,
+                prompt_style=prompt_style,
             )
             for idx, example in enumerate(questions)
         ]
@@ -207,8 +250,9 @@ def main() -> None:
                     "split": split,
                     "rows": len(rows),
                     "output_path": str(out_path),
-                    "data_source": args.data_source,
+                    "data_source": data_source,
                     "agent_name": args.agent_name,
+                    "prompt_style": prompt_style,
                 },
                 indent=2,
             )
