@@ -31,8 +31,10 @@
 
 - `effective_1000` on `probe200`: `0.7500 -> 0.8000`，`+0.0500`
 - `effective_2500` on `probe200`: `0.7950 -> 0.8300`，`+0.0350`
+- `agentic_step1000` on full official eval: `0.7845`
 - 两组里 `correct_to_wrong_rate` 都是 `0.0`
 - 当前收益主要来自 `verification_incorrect -> correct`，不是 execution error repair
+- `2x4090` 上的 full agentic train 已经跑通到 `step1000` checkpoint，但连续长跑在 `step1447` 左右遇到 `vLLM sleep/unmap` 路径崩溃；当前恢复策略是 `resume_from_path + disable_sleep_mode`
 
 最新离线评测总表见：
 
@@ -41,6 +43,7 @@
 详细实验记录见：
 
 - [outputs/2026-05-22/llmsql_verl_experiment_report.md](/root/rl_project/outputs/2026-05-22/llmsql_verl_experiment_report.md)
+- [docs/llmsql_agentic_resume_project_plan.md](/root/rl_project/docs/llmsql_agentic_resume_project_plan.md)
 
 ## Offline Eval Snapshot
 
@@ -68,12 +71,28 @@
 
 ## Agent Loop Snapshot
 
-当前先做的是 `limit=200` 的 prototype probe，不是 full test。
+当前同时保留两类结果：
+
+- `probe200`：快速看 loop 是否有正向收益
+- `full official eval`：把整段 trajectory 导出最后的 `<final_sql>`，再接官方 `evaluate`
 
 | Model | Split | first_acc | final_acc | gain | repair_attempt_rate | repair_success_rate | verification_repair_gain | correct_to_wrong_rate |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | `effective_1000` | `probe200` | `0.7500` | `0.8000` | `+0.0500` | `0.2500` | `0.2000` | `0.2083` | `0.0000` |
 | `effective_2500` | `probe200` | `0.7950` | `0.8300` | `+0.0350` | `0.2050` | `0.1707` | `0.1842` | `0.0000` |
+
+说明：
+
+- `agentic_step1000 full` 里的 `first_acc=0.0` 是预期现象，不代表模型完全失效。
+- 原因是当前 tool-only agent 的 first turn 通常输出 exploratory `<sql>`，不是最终答案。
+- 因此 full official 口径的主结果应看 `final_acc=0.7845`，也就是“导出最后 `<final_sql>` 后再跑官方 evaluate”的分数。
+- 上表里的 `repair_attempt_rate / repair_success_rate / verification_repair_gain / correct_to_wrong_rate` 是旧 `verify_incorrect` 原型 loop 的指标，不适合直接复用到当前 tool-only agent full eval。
+
+当前 tool-only agent 的 full official eval 单独记：
+
+| Model | Split | final_acc | final_matches | final_sql_errors | final_sql_extract_rate |
+| --- | --- | --- | --- | --- | --- |
+| `agentic_step1000` | `full` | `0.7845` | `12421 / 15834` | `816` | `0.9997` |
 
 本地结果目录：
 
@@ -81,6 +100,8 @@
   `/root/shared-nvme/rlvr/evals/qwen25_coder_3b_agent_loop_effective1000_probe200`
 - `effective_2500`:
   `/root/shared-nvme/rlvr/evals/qwen25_coder_3b_agent_loop_effective2500_probe200`
+- `agentic_step1000`:
+  `/root/shared-nvme/rlvr/evals/qwen25_coder_3b_agentic_step1000_full`
 
 ## Layout
 
@@ -182,6 +203,8 @@ watch -n 5 'python /root/rl_project/scripts/count_llmsql_predictions.py --output
 
 - [docs/llmsql_tool_only_agent_rl.md](/root/rl_project/docs/llmsql_tool_only_agent_rl.md)
 - [docs/llmsql_agentic_sql_loop.md](/root/rl_project/docs/llmsql_agentic_sql_loop.md)
+- [docs/llmsql_agentic_resume_project_plan.md](/root/rl_project/docs/llmsql_agentic_resume_project_plan.md)
+- [docs/llmsql_agentic_current_direction.md](/root/rl_project/docs/llmsql_agentic_current_direction.md)
 
 6. 查看 parquet 结构
 

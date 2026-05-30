@@ -1,0 +1,6 @@
+- name: llmsql_tool_agent
+  _target_: llmsql_agentic.agent_loop.LLMSQLToolAgentLoop
+  db_path: /root/shared-nvme/rlvr/datasets/llmsql-2.0/sqlite_tables.db
+  max_tool_turns: 2
+  preview_rows: 5
+  preview_max_chars: 2000
