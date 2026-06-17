@@ -1,0 +1,13 @@
+aiohttp==3.13.5
+datasets==4.8.5
+llmsql==0.1.16
+pandas==2.3.3
+pyarrow==24.0.0
+ray==2.55.1
+tqdm==4.67.3
+transformers==5.8.1
+vllm==0.21.0
+
+# Torch in the original environment was:
+# torch==2.11.0+cu130
+# Install the CUDA build that matches your system separately if needed.

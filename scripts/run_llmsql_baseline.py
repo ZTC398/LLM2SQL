@@ -1,38 +1,51 @@
 #!/usr/bin/env python3
 import argparse
 import json
+import os
 from pathlib import Path
 
 from llmsql import evaluate, inference_vllm
 
 
 def parse_args() -> argparse.Namespace:
+    default_dataset_dir = os.environ.get(
+        "LLMSQL_DATASET_DIR",
+        "/root/shared-nvme/rlvr/datasets/llmsql-2.0",
+    )
+    default_model_path = os.environ.get(
+        "MODEL_PATH",
+        "/root/shared-nvme/rlvr/models/Qwen2.5-Coder-3B-Instruct",
+    )
+    default_output_dir = os.environ.get(
+        "LLMSQL_OUTPUT_ROOT",
+        "/root/shared-nvme/rlvr/outputs",
+    )
     parser = argparse.ArgumentParser(
         description="Run LLMSQL baseline inference with vLLM and evaluate results."
     )
     parser.add_argument(
         "--model-path",
-        default="/root/shared-nvme/rlvr/models/Qwen2.5-Coder-3B-Instruct",
+        default=default_model_path,
         help="Local model path or Hugging Face model id.",
     )
     parser.add_argument(
         "--questions-path",
-        default="/root/shared-nvme/rlvr/datasets/llmsql-2.0/test_questions.jsonl",
+        default=str(Path(default_dataset_dir) / "test_questions.jsonl"),
         help="Path to LLMSQL questions JSONL. Use test split for benchmark eval.",
     )
     parser.add_argument(
         "--tables-path",
-        default="/root/shared-nvme/rlvr/datasets/llmsql-2.0/tables.jsonl",
+        default=str(Path(default_dataset_dir) / "tables.jsonl"),
         help="Path to LLMSQL tables JSONL.",
     )
     parser.add_argument(
         "--db-path",
-        default="/root/shared-nvme/rlvr/datasets/llmsql-2.0/sqlite_tables.db",
+        default=str(Path(default_dataset_dir) / "sqlite_tables.db"),
         help="Path to LLMSQL sqlite db used by official evaluator.",
     )
     parser.add_argument(
         "--output-dir",
-        default="/root/shared-nvme/rlvr/outputs/baseline_qwen25_coder_3b",
+        default=str(Path(default_output_dir) / "baseline_qwen25_coder_3b"),
         help="Directory to save predictions and evaluation reports.",
     )
     parser.add_argument(

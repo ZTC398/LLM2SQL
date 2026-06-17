@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+import os
 from pathlib import Path
 from typing import Any
 
@@ -26,15 +27,27 @@ SPLIT_TO_FILE = {
 
 
 def parse_args() -> argparse.Namespace:
+    default_dataset_dir = os.environ.get(
+        "LLMSQL_DATASET_DIR",
+        "/root/shared-nvme/rlvr/datasets/llmsql-2.0",
+    )
+    default_output_dir = os.environ.get(
+        "LLMSQL_VERL_DATA_DIR",
+        "/root/shared-nvme/rlvr/verl_data/llmsql_5shot",
+    )
     parser = argparse.ArgumentParser(
         description="Prepare verl parquet files from llmsql-2.0 JSONL files.",
     )
     parser.add_argument(
         "--dataset-dir",
-        default="/root/shared-nvme/rlvr/datasets/llmsql-2.0",
+        default=default_dataset_dir,
         help="Directory containing LLMSQL benchmark files.",
     )
-    parser.add_argument("--output-dir", default="/root/shared-nvme/rlvr/verl_data/llmsql_5shot", help="Directory to write verl parquet files.")
+    parser.add_argument(
+        "--output-dir",
+        default=default_output_dir,
+        help="Directory to write verl parquet files.",
+    )
     parser.add_argument(
         "--num-fewshots",
         type=int,

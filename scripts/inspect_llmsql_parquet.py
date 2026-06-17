@@ -6,13 +6,19 @@ from __future__ import annotations
 import argparse
 import ast
 import json
+import os
 from pathlib import Path
 from typing import Any
 
 import pandas as pd
 
 
-DEFAULT_DATA_DIR = Path("/root/shared-nvme/rlvr/verl_data/llmsql_5shot")
+DEFAULT_DATA_DIR = Path(
+    os.environ.get(
+        "LLMSQL_VERL_DATA_DIR",
+        "/root/shared-nvme/rlvr/verl_data/llmsql_5shot",
+    )
+)
 
 
 def _maybe_parse(value: Any) -> Any:

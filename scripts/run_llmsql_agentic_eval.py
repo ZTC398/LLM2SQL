@@ -29,9 +29,16 @@ from llmsql_agentic.tool_env import LLMSQLToolEnv  # noqa: E402
 
 DEFAULT_BASE_URL = "http://127.0.0.1:8000/v1"
 DEFAULT_API_KEY_ENV = "OPENAI_API_KEY"
-DEFAULT_AGENT_PARQUET = "/root/shared-nvme/rlvr/verl_data/llmsql_agent_0shot/test.parquet"
-DEFAULT_QUESTIONS_PATH = "/root/shared-nvme/rlvr/datasets/llmsql-2.0/test_questions.jsonl"
-DEFAULT_DB_PATH = "/root/shared-nvme/rlvr/datasets/llmsql-2.0/sqlite_tables.db"
+DEFAULT_DATASET_DIR = os.environ.get(
+    "LLMSQL_DATASET_DIR",
+    "/root/shared-nvme/rlvr/datasets/llmsql-2.0",
+)
+DEFAULT_AGENT_PARQUET = os.environ.get(
+    "LLMSQL_AGENT_DATA_PATH",
+    "/root/shared-nvme/rlvr/verl_data/llmsql_agent_0shot/test.parquet",
+)
+DEFAULT_QUESTIONS_PATH = str(Path(DEFAULT_DATASET_DIR) / "test_questions.jsonl")
+DEFAULT_DB_PATH = str(Path(DEFAULT_DATASET_DIR) / "sqlite_tables.db")
 
 
 class RateGate:

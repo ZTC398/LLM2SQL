@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 from pathlib import Path
 from typing import Any
@@ -26,8 +27,14 @@ SPLIT_TO_FILE = {
 }
 
 
-DEFAULT_DATASET_DIR = "/root/shared-nvme/rlvr/datasets/llmsql-2.0"
-DEFAULT_OUTPUT_ROOT = "/root/shared-nvme/rlvr/verl_data"
+DEFAULT_DATASET_DIR = os.environ.get(
+    "LLMSQL_DATASET_DIR",
+    "/root/shared-nvme/rlvr/datasets/llmsql-2.0",
+)
+DEFAULT_OUTPUT_ROOT = os.environ.get(
+    "LLMSQL_OUTPUT_ROOT",
+    "/root/shared-nvme/rlvr/verl_data",
+)
 
 
 def parse_args() -> argparse.Namespace:

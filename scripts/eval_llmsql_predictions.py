@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sqlite3
 from collections import Counter
 from pathlib import Path
@@ -18,6 +19,10 @@ AGG_FUNCS = ("count(", "avg(", "sum(", "max(", "min(")
 
 
 def parse_args() -> argparse.Namespace:
+    default_dataset_dir = os.environ.get(
+        "LLMSQL_DATASET_DIR",
+        "/root/shared-nvme/rlvr/datasets/llmsql-2.0",
+    )
     parser = argparse.ArgumentParser(
         description="Run richer offline evaluation for LLMSQL prediction files."
     )
@@ -28,12 +33,12 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--questions-path",
-        default="/root/shared-nvme/rlvr/datasets/llmsql-2.0/test_questions.jsonl",
+        default=str(Path(default_dataset_dir) / "test_questions.jsonl"),
         help="Path to official LLMSQL questions jsonl.",
     )
     parser.add_argument(
         "--db-path",
-        default="/root/shared-nvme/rlvr/datasets/llmsql-2.0/sqlite_tables.db",
+        default=str(Path(default_dataset_dir) / "sqlite_tables.db"),
         help="Path to official LLMSQL sqlite database.",
     )
     parser.add_argument(

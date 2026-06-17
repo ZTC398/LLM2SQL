@@ -6,11 +6,10 @@ __pycache__/
 .DS_Store
 
 .vscode/
-
-outputs/*
-!outputs/2026-05-22/
-outputs/2026-05-22/*
-!outputs/2026-05-22/llmsql_verl_experiment_report.md
+logs/
+*.log
+outputs/
+docs/
 
 third_party/verl.zip
 third_party/verl/.agent/
